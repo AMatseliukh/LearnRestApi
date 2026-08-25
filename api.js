@@ -2,13 +2,43 @@
 // Компоненти імпортують звідси функції й нічого не знають про fetch,
 // URL чи коди статусів.
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL
+import Constants from 'expo-constants'
+
+// Порт, на якому слухає воркер: npx wrangler dev --ip 0.0.0.0
+const API_PORT = 8787
+
+// Адреса визначається у два кроки.
+//
+// 1. EXPO_PUBLIC_API_URL, якщо заданий — має пріоритет. Знадобиться після
+//    деплою воркера, коли адреса стане публічним https-URL.
+// 2. Інакше беремо хост, з якого телефон щойно завантажив бандл, і
+//    підставляємо порт воркера. Metro і воркер крутяться на одному
+//    ноутбуці, тому IP у них спільний — і при зміні адреси роутером
+//    нічого правити не треба, достатньо пересканувати QR.
+function resolveBaseUrl() {
+  const explicit = process.env.EXPO_PUBLIC_API_URL
+  if (explicit) {
+    return explicit.replace(/\/+$/, '')
+  }
+
+  // expoConfig за документацією може бути null, а hostUri гарантований
+  // лише в режимі розробки — звідси обережний доступ.
+  const hostUri = Constants.expoConfig?.hostUri
+  if (hostUri) {
+    const host = hostUri.split(':')[0]
+    return `http://${host}:${API_PORT}`
+  }
+
+  return null
+}
+
+const BASE_URL = resolveBaseUrl()
 
 // Внутрішній помічник. Назовні не експортується.
 async function request(path, options) {
   if (!BASE_URL) {
     throw new Error(
-      'EXPO_PUBLIC_API_URL не заданий. Перевір .env.local і перезавантаж застосунок.'
+      'Не вдалося визначити адресу API. Задай EXPO_PUBLIC_API_URL у .env.local.'
     )
   }
 
@@ -17,7 +47,7 @@ async function request(path, options) {
     res = await fetch(`${BASE_URL}${path}`, options)
   } catch {
     // Сюди потрапляємо, лише коли запит не дійшов узагалі:
-    // немає Wi-Fi, воркер не запущений, не той IP.
+    // немає Wi-Fi, воркер не запущений, не той порт.
     throw new Error(`Не вдалося зв'язатися з сервером (${BASE_URL})`)
   }
 
