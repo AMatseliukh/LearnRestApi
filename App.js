@@ -64,8 +64,34 @@ export default function App() {
     })
   }
 
-  const handleToggle = (item) =>
-    mutate(() => updateTodo(item.id, { is_done: !item.is_done }))
+  // Оптимістичне перемикання: малюємо новий стан одразу, не чекаючи
+  // на сервер. Якщо запит не вдасться — повертаємо як було.
+  const handleToggle = async (item) => {
+    const next = !item.is_done
+
+    // Скрізь функціональна форма setTodos: два швидкі тапи по різних
+    // рядках інакше прочитали б застарілий масив і перезаписали одне одного.
+    setTodos((current) =>
+      current.map((t) => (t.id === item.id ? { ...t, is_done: next } : t))
+    )
+    setError(null)
+
+    try {
+      // Відповідь сервера — джерело істини, тому підставляємо саме її,
+      // а не лишаємо своє припущення.
+      const saved = await updateTodo(item.id, { is_done: next })
+      setTodos((current) => current.map((t) => (t.id === item.id ? saved : t)))
+    } catch (err) {
+      // Відкочуємо лише це поле цього рядка, а не весь масив: поки
+      // запит летів, користувач міг змінити щось іще.
+      setTodos((current) =>
+        current.map((t) =>
+          t.id === item.id ? { ...t, is_done: item.is_done } : t
+        )
+      )
+      setError(err.message)
+    }
+  }
 
   const handleDelete = (item) => mutate(() => deleteTodo(item.id))
 
